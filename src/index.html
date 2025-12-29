@@ -1,32 +1,305 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <link rel="stylesheet" href="styles.css" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus App</title>
-        <script type="module" src="/main.js" defer></script>
-    </head>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据筛选工具</title>
+    <script src="css/tailwindcss.min.js"></script>
+    <style>
+        .draggable {
+            cursor: move;
+            transition: all 0.2s ease;
+        }
+        
+        .draggable:hover {
+            transform: scale(1.05);
+        }
+        
+        .draggable.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+        
+        .drop-zone {
+            min-height: 60px;
+            border: 2px dashed #d1d5db;
+            transition: all 0.2s ease;
+        }
+        
+        .drop-zone.drag-over {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        
+        .header-chip {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 4px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            cursor: move;
+            user-select: none;
+            position: relative;
+            font-size: 14px;
+            font-weight: 500;
+            min-width: 80px;
+            text-align: center;
+        }
+        
+        .header-chip.selected {
+            background: #3b82f6;
+            color: white;
+            border-color: #1d4ed8;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+        
+        .header-chip .remove-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 22px;
+            height: 22px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border: 2px solid white;
+        }
+        
+        .header-chip.selected .remove-btn {
+            display: flex;
+        }
+        
+        .header-chip .remove-btn:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+        
+        .data-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        /* 限制表头行选择器下拉框的最大宽度 */
+        #headerRowSelect {
+            max-width: 300px;
+        }
+        
+        .btn-purple {
+            background-color: #8b5cf6;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-purple:hover {
+            background-color: #7c3aed;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-gray-900">📊 数据筛选工具</h1>
+            <p class="text-gray-600 mt-2">支持Excel、CSV文件的数据筛选和导出功能</p>
+        </div>
 
-    <body>
-        <main class="container">
-            <h1>Welcome to PakePlus</h1>
-            <form class="row" id="greet-form">
-                <input id="inputValue" placeholder="Enter a something..." />
-            </form>
-            <div class="resultBox">
-                <span>result: </span>
-                <span id="result"></span>
+        <!-- 文件导入区域 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                📁 导入Excel文件
+            </h2>
+            <div class="flex items-center gap-4">
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" multiple>
+                <button onclick="document.getElementById('fileInput').click()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                    📎 选择文件
+                </button>
+                <span id="fileName" class="text-sm text-gray-600">未选择文件</span>
+                <button id="clearBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-md transition-colors" style="display: none;">
+                    🗑️ 清空数据
+                </button>
+                <input type="file" id="importTemplateInput" accept=".json" style="display: none;" multiple>
+                <button id="importTemplateBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                    📥 导入模板
+                </button>
+                <button id="exportByTemplateBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-md transition-colors" style="display: none;">
+                    📤 按模板导出
+                </button>
             </div>
-            <div class="invokeBox">
-                <button id="openUrl">open_url_browser</button>
-                <button id="openUrlNew">open_url_new</button>
-                <button id="runCommand">run_command</button>
-                <button id="downloadFile">download_file</button>
-                <button id="getExeDir">get_exe_dir</button>
-                <button id="getEnvVar">get_env_var</button>
-                <button id="findPort">find_port</button>
+            <p class="text-xs text-gray-500 mt-2">
+                支持 .xlsx、.xls、.csv 格式文件（可多选）
+            </p>
+        </div>
+
+        <!-- 工作表选择区域 -->
+        <div id="worksheetSelector" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                📊 选择工作表
+            </h2>
+            <div class="flex items-center gap-4">
+                <label class="text-sm font-medium text-gray-700">工作表：</label>
+                <select id="worksheetSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" style="max-width: 300px;">
+                    <!-- 工作表选项将在这里显示 -->
+                </select>
+                <button id="parseWorksheetBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                    ✓ 解析选中工作表
+                </button>
+                <button id="cancelWorksheetBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                    ✗ 取消
+                </button>
             </div>
-        </main>
-    </body>
+            <p class="text-xs text-gray-500 mt-2">
+                该Excel文件包含多个工作表，请选择要处理的工作表
+            </p>
+        </div>
+
+        <!-- 表头行选择区域 -->
+        <div id="headerRowSelector" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                📐 选择表头所在行或分组导出
+            </h2>
+            <div class="flex items-center gap-4">
+                <label class="text-sm font-medium text-gray-700">表头行：</label>
+                <select id="headerRowSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-md">
+                    <!-- 行选项将在这里显示 -->
+                </select>
+                <div class="flex items-center gap-4 ml-8">
+                    <label class="text-sm font-medium text-gray-700">按列分组导出：</label>
+                    <select id="groupExportColumn" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- 选择分组列 --</option>
+                        <!-- 列选项将在这里动态生成 -->
+                    </select>
+                    <button id="exportByGroupBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                        📤 按组导出
+                    </button>
+                    <!-- 分组导出提示信息 -->
+                    <div id="groupExportHintContainer" class="ml-4" style="display: none;">
+                        <p id="groupExportHint" class="text-xs text-gray-500">
+                            该列包含 <span id="groupCount">0</span> 个不同的分组<br>
+                            每次下载上限50个文件
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+                请选择哪一行作为表头，默认为第一行
+            </p>
+        </div>
+
+        <!-- 原始表头区域 -->
+        <div id="originalHeadersSection" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display: none;">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    📋 原始表头（拖动到下方选择区域）
+                </h2>
+                <button id="selectAllBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                    ✅ 全选
+                </button>
+            </div>
+            <div id="originalHeaders" class="min-h-16 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                <!-- 原始表头将在这里显示 -->
+            </div>
+        </div>
+
+        <!-- 筛选表头区域 -->
+        <div id="selectedHeadersSection" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display: none;">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    ✅ 已选择的表头（可拖动排序）
+                </h2>
+                <div class="flex gap-2">
+                    <button id="clearSelectedBtn" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                        🗑️ 清空选择
+                    </button>
+                    <button id="generatePreviewBtn" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                        👁️ 生成预览
+                    </button>
+                </div>
+            </div>
+            <!-- 数据筛选区域 -->
+            <div id="dataFilterSection" class="mb-4 p-3 bg-gray-50 rounded-lg" style="display: none;">
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                    <span class="text-sm font-medium text-gray-700">筛选条件数量:</span>
+                    <select id="filterCountSelect" class="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="1">1个</option>
+                        <option value="2" selected>2个</option>
+                        <option value="3">3个</option>
+                        <option value="4">4个</option>
+                        <option value="5">5个</option>
+                        <option value="6">6个</option>
+                        <option value="7">7个</option>
+                        <option value="8">8个</option>
+                        <option value="9">9个</option>
+                        <option value="10">10个</option>
+                    </select>
+                    <button id="updateFilterCountBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm py-1 px-3 rounded-md transition-colors">
+                        更新
+                    </button>
+                </div>
+                <div id="filterConditionsContainer">
+                    <!-- 筛选条件将在这里动态生成 -->
+                </div>
+            </div>
+            <div id="selectedHeaders" class="drop-zone min-h-16 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                <p class="text-gray-500 text-center">将上方的表头拖动到这里进行筛选</p>
+            </div>
+        </div>
+
+        <!-- 数据预览区域 -->
+        <div id="previewSection" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display: none;">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    📊 数据预览
+                </h2>
+                <div class="flex gap-2">
+                    <div class="flex items-center">
+                        <label class="text-sm font-medium text-gray-700 mr-2">导出格式:</label>
+                        <select id="exportFormat" class="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="csv">CSV</option>
+                            <option value="xlsx" selected>Excel (.xlsx)</option>
+                            <option value="xls">Excel (.xls)</option>
+                        </select>
+                    </div>
+                    <button id="exportBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                        📤 导出数据
+                    </button>
+                    <button id="exportTemplateBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                        📐 导出模板
+                    </button>
+                </div>
+            </div>
+            <div class="data-table">
+                <table id="previewTable" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <!-- 表头将在这里显示 -->
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <!-- 数据将在这里显示 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="dataStats" class="mt-4 text-sm text-gray-600">
+                <!-- 数据统计信息 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 隐藏的文件读取区域 -->
+    <input type="file" id="hiddenFileInput" style="display: none;" accept=".xlsx,.xls,.csv">
+
+    <script src="js/xlsx.full.min.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/data-filter-fix.js"></script>
+    <script src="js/data-filter.js"></script>
+</body>
 </html>
